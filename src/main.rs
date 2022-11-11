@@ -20,4 +20,7 @@ fn main() {
     let mut f = OpenOptions::new().read(true).open(opts.input_file).expect("open");
     let mut s = String::new();
     f.read_to_string(&mut s).expect("read");
+
+    let results = parse::envfile(s.as_str()).expect("parse");
+    println!("{:?}", results);
 }
