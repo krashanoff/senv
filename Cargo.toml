@@ -1,0 +1,10 @@
+[package]
+name = "senv"
+description = "agnostic .env"
+authors = ["Leonid Krashanoff <leo@krashanoff.com>"]
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+clap = { version = "4", default-features = false, features = ["std", "help", "usage", "derive"] }
+nom = "7"
