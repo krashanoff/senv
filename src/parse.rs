@@ -1,18 +1,23 @@
 //! parsers
+//!
+//! TODO:
+//! * escaped characters
+//! * interpolation
+//!
 
 use std::convert::Infallible;
 
 use nom::{
     branch::alt,
-    bytes::complete::{is_not, tag},
+    bytes::complete::{is_not, tag, take_until},
     character::complete::{alpha1, alphanumeric1, anychar, newline, space0},
-    combinator::{eof, map_res, opt, recognize, rest},
+    combinator::{eof, map, map_res, opt, recognize, value},
     multi::{many0, separated_list0},
-    sequence::{delimited, pair, terminated, tuple},
+    sequence::{delimited, pair, tuple},
     IResult,
 };
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Statement<'a> {
     key: &'a str,
     value: &'a str,
@@ -60,34 +65,26 @@ fn double_quoted(input: &str) -> IResult<&str, &str> {
 
 /// multidouble quote
 fn multidquote(input: &str) -> IResult<&str, &str> {
-    delimited(
-        tuple((opt(tag("\"\"\"")), newline)),
-        recognize(rest),
-        tuple((newline, opt(tag("\"\"\"")))),
-    )(input)
+    let first_tag = value((), tag("\"\"\""));
+    let last_tag = value((), tag("\"\"\""));
+    let r = tuple((first_tag, recognize(take_until("\"\"\"")), last_tag));
+    let mut next = map(r, |(_b, inner, _a): ((), &str, ())| inner);
+    next(input)
 }
 
-/// multisingle quote
-fn multisquote(input: &str) -> IResult<&str, &str> {
-    delimited(tag("'''\n"), recognize(rest), tag("\n'''"))(input)
-}
-
-fn terminate_multiline(input: &str) -> IResult<&str, &str> {
-    recognize(tuple((newline, opt(tag("'''")))))(input)
-}
-
-fn multi_other(input: &str) -> IResult<&str, &str> {
-    delimited(
-        tuple((newline, opt(tag("'''")))),
-        recognize(rest),
-        tuple((newline, opt(tag("'''")))),
-    )(input)
+/// multi single quote
+fn multi_squote(input: &str) -> IResult<&str, &str> {
+    let first_tag = value((), tag("'''"));
+    let last_tag = value((), tag("'''"));
+    let r = tuple((first_tag, recognize(take_until("'''")), last_tag));
+    let mut next = map(r, |(_b, inner, _a): ((), &str, ())| inner);
+    next(input)
 }
 
 fn env_value<'a>(input: &str) -> IResult<&str, &str> {
     alt((
         multidquote,
-        multisquote,
+        multi_squote,
         double_quoted,
         single_quoted,
         unquoted,
@@ -121,7 +118,7 @@ fn statement<'a>(input: &'a str) -> IResult<&str, Statement<'a>> {
 }
 
 pub fn envfile<'a>(input: &'a str) -> IResult<&str, Vec<Statement<'a>>> {
-    separated_list0(newline, statement)(input)
+    many0(delimited(many0(newline), statement, many0(newline)))(input)
 }
 
 #[cfg(test)]
@@ -164,43 +161,72 @@ mod test {
 
     #[test]
     fn test_multi() {
-        println!("{:?}", multi_other("'''\ntest\n'''").expect("work"));
-        assert!(false);
-
-        multidquote(
-            r"'''
-    test
-    '''",
-        )
-        .expect("thing");
+        assert_eq!(multi_squote("'''test\n'''"), Ok(("", "test\n")));
+        assert_eq!(
+            multi_squote(
+                r"'''
+test
+'''",
+            ),
+            Ok(("", "\ntest\n"))
+        );
         assert_eq!(
             multidquote(
-                "\"\"\"\n \
-              some value!\n \
-              \"\"\""
+                "\"\"\"\n\
+              some value!\n\
+                \"\"\""
             ),
             Ok(("", "\nsome value!\n"))
         );
         assert_eq!(
-            multisquote(
-                r"'''
-        some value!
-        '''"
+            multi_squote(
+                "'''\n\
+        some value!!\n\
+'''"
             ),
-            Ok(("", "\nsome value\n"))
+            Ok(("", "\nsome value!!\n"))
         );
     }
 
     #[test]
     fn test_statement() {
-        let test = "export _VAL1D_IDENT=\"some value\" # with a comment at the end, optionally.";
-        let r = statement(test);
-        match r {
-            Ok((r, Statement { key, value })) => {
-                assert_eq!(key, "_VAL1D_IDENT");
-                assert_eq!(value, "some value");
-            }
-            Err(_) => assert!(false),
-        }
+        assert_eq!(
+            statement(
+                "export _VAL1D_IDENT=\"some value\" # with a comment at the end, optionally."
+            ),
+            Ok((
+                "",
+                Statement {
+                    key: "_VAL1D_IDENT",
+                    value: "some value",
+                }
+            ))
+        );
+        assert_eq!(
+            statement("VALI4='''\nsome value\n''' # with a comment"),
+            Ok((
+                "",
+                Statement {
+                    key: "VALI4",
+                    value: "\nsome value\n",
+                }
+            ))
+        );
+    }
+
+    #[test]
+    fn test_envfile() {
+        let (r, ss) = envfile(
+            r"
+TEST=value
+export SOME_VAL= # no value",
+        )
+        .expect("thing");
+        assert_eq!(r, "");
+        assert_eq!(ss.len(), 2);
+        assert!(ss
+            .iter()
+            .find(|a| a.key == "TEST" && a.value == "value")
+            .is_some());
     }
 }
