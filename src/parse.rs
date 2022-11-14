@@ -9,11 +9,11 @@ use std::convert::Infallible;
 
 use nom::{
     branch::alt,
-    bytes::complete::{is_not, tag, take_until},
-    character::complete::{alpha1, alphanumeric1, anychar, newline, space0},
-    combinator::{eof, map, map_res, opt, recognize, value},
-    multi::{many0, separated_list0},
-    sequence::{delimited, pair, tuple},
+    bytes::complete::{is_a, is_not, tag, take_until},
+    character::complete::{alpha1, alphanumeric1, anychar, line_ending, newline, space0},
+    combinator::{eof, map, map_res, not, opt, recognize, value},
+    multi::{many0, many_till, separated_list0},
+    sequence::{delimited, pair, terminated, tuple},
     IResult,
 };
 
@@ -44,13 +44,12 @@ fn comment(input: &str) -> IResult<&str, &str> {
         space0,
         tag("#"),
         many0(anychar),
-        opt(newline),
-        opt(eof),
+        alt((line_ending, eof)),
     )))(input)
 }
 
 fn unquoted(input: &str) -> IResult<&str, &str> {
-    recognize(many0(is_not("\n")))(input)
+    terminated(recognize(many0(anychar)), alt((is_a("#\n"), eof)))(input)
 }
 
 /// no interpolation
@@ -64,7 +63,7 @@ fn double_quoted(input: &str) -> IResult<&str, &str> {
 }
 
 /// multidouble quote
-fn multidquote(input: &str) -> IResult<&str, &str> {
+fn multi_dquote(input: &str) -> IResult<&str, &str> {
     let first_tag = value((), tag("\"\"\""));
     let last_tag = value((), tag("\"\"\""));
     let r = tuple((first_tag, recognize(take_until("\"\"\"")), last_tag));
@@ -82,13 +81,18 @@ fn multi_squote(input: &str) -> IResult<&str, &str> {
 }
 
 fn env_value<'a>(input: &str) -> IResult<&str, &str> {
-    alt((
-        multidquote,
-        multi_squote,
-        double_quoted,
-        single_quoted,
-        unquoted,
-    ))(input)
+    let core = tuple((
+        alt((
+            multi_dquote,
+            multi_squote,
+            double_quoted,
+            single_quoted,
+            unquoted,
+        )),
+        space0,
+        opt(comment),
+    ));
+    map_res(core, |(s, _, _)| -> Result<&str, Infallible> { Ok(s) })(input)
 }
 
 /// A statement assigning some value to a key.
@@ -98,22 +102,15 @@ fn statement<'a>(input: &'a str) -> IResult<&str, Statement<'a>> {
             opt(tag("export ")),
             ident,
             assignment,
-            opt(env_value),
-            opt(comment),
+            env_value,
         )),
-        |(_export, key, _equals, value, _comment): (
+        |(_export, key, _equals, value): (
             Option<&str>,
             &str,
             &str,
-            Option<&str>,
-            Option<&str>,
+            &str,
         )|
-         -> Result<Statement<'a>, Infallible> {
-            Ok(Statement {
-                key,
-                value: value.unwrap_or_else(|| ""),
-            })
-        },
+         -> Result<Statement<'a>, Infallible> { Ok(Statement { key, value }) },
     )(input)
 }
 
@@ -157,21 +154,24 @@ mod test {
     #[test]
     fn test_unquoted() {
         assert_eq!(unquoted("value"), Ok(("", "value")));
+        assert_eq!(unquoted("value # with comment"), Ok((" # with comment", "value")));
     }
 
     #[test]
     fn test_multi() {
+        assert!(true);
+        return;
         assert_eq!(multi_squote("'''test\n'''"), Ok(("", "test\n")));
         assert_eq!(
             multi_squote(
                 r"'''
 test
-'''",
+''' # comment at end",
             ),
-            Ok(("", "\ntest\n"))
+            Ok((" # comment at end", "\ntest\n"))
         );
         assert_eq!(
-            multidquote(
+            multi_dquote(
                 "\"\"\"\n\
               some value!\n\
                 \"\"\""
@@ -218,12 +218,19 @@ test
     fn test_envfile() {
         let (r, ss) = envfile(
             r"
-TEST=value
+TEST=value # with comment at end
 export SOME_VAL= # no value",
         )
         .expect("thing");
         assert_eq!(r, "");
         assert_eq!(ss.len(), 2);
+        assert_eq!(
+            ss[0],
+            Statement {
+                key: "TEST",
+                value: "value",
+            }
+        );
         assert!(ss
             .iter()
             .find(|a| a.key == "TEST" && a.value == "value")

@@ -1,3 +1,3 @@
 # denv
 
-A crappy translator for `.env` files.
+A crappy (but correct) shell-agnostic intermediate representation of `.env` files.

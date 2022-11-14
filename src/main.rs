@@ -21,6 +21,8 @@ fn main() {
     let mut s = String::new();
     f.read_to_string(&mut s).expect("read");
 
-    let results = parse::envfile(s.as_str()).expect("parse");
-    println!("{:?}", results);
+    let (_leftover, results) = parse::envfile(s.as_str()).expect("parse");
+    for result in results {
+        println!("{:?}", result);
+    }
 }
