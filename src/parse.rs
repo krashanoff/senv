@@ -9,9 +9,12 @@ use std::convert::Infallible;
 
 use nom::{
     branch::alt,
-    bytes::complete::{is_a, is_not, tag, take_until},
-    character::complete::{alpha1, alphanumeric1, anychar, line_ending, newline, space0},
-    combinator::{eof, map, map_res, not, opt, recognize, value},
+    bytes::complete::{is_a, is_not, tag, take_until, take_while},
+    character::{
+        complete::{alpha1, alphanumeric1, anychar, line_ending, newline, space0, space1, multispace0},
+        is_space,
+    },
+    combinator::{eof, map, map_res, not, opt, recognize, rest, value, all_consuming},
     multi::{many0, many_till, separated_list0},
     sequence::{delimited, pair, terminated, tuple},
     IResult,
@@ -43,13 +46,13 @@ fn comment(input: &str) -> IResult<&str, &str> {
     recognize(tuple((
         space0,
         tag("#"),
-        many0(anychar),
-        alt((line_ending, eof)),
+        alt((take_until("\n"), take_until("\r\n"), rest))
     )))(input)
 }
 
 fn unquoted(input: &str) -> IResult<&str, &str> {
-    terminated(recognize(many0(anychar)), alt((is_a("#\n"), eof)))(input)
+    let terminated = alt((take_until(" "), take_until(" #"), take_until("#"), rest));
+    recognize(terminated)(input)
 }
 
 /// no interpolation
@@ -103,19 +106,22 @@ fn statement<'a>(input: &'a str) -> IResult<&str, Statement<'a>> {
             ident,
             assignment,
             env_value,
+            opt(comment),
         )),
-        |(_export, key, _equals, value): (
+        |(_export, key, _equals, value, _comment): (
             Option<&str>,
             &str,
             &str,
             &str,
+            Option<&str>,
         )|
          -> Result<Statement<'a>, Infallible> { Ok(Statement { key, value }) },
     )(input)
 }
 
 pub fn envfile<'a>(input: &'a str) -> IResult<&str, Vec<Statement<'a>>> {
-    many0(delimited(many0(newline), statement, many0(newline)))(input)
+    let file = many0(delimited(multispace0, statement, multispace0));
+    all_consuming(file)(input)
 }
 
 #[cfg(test)]
@@ -154,13 +160,14 @@ mod test {
     #[test]
     fn test_unquoted() {
         assert_eq!(unquoted("value"), Ok(("", "value")));
-        assert_eq!(unquoted("value # with comment"), Ok((" # with comment", "value")));
+        assert_eq!(
+            unquoted("value # with comment"),
+            Ok((" # with comment", "value"))
+        );
     }
 
     #[test]
     fn test_multi() {
-        assert!(true);
-        return;
         assert_eq!(multi_squote("'''test\n'''"), Ok(("", "test\n")));
         assert_eq!(
             multi_squote(
@@ -217,11 +224,12 @@ test
     #[test]
     fn test_envfile() {
         let (r, ss) = envfile(
-            r"
-TEST=value # with comment at end
+            " \
+TEST=value # with comment at end\n \
 export SOME_VAL= # no value",
         )
         .expect("thing");
+        println!("{:?} {:?}", r, ss);
         assert_eq!(r, "");
         assert_eq!(ss.len(), 2);
         assert_eq!(
