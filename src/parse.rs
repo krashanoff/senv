@@ -9,14 +9,11 @@ use std::convert::Infallible;
 
 use nom::{
     branch::alt,
-    bytes::complete::{is_a, is_not, tag, take_until, take_while},
-    character::{
-        complete::{alpha1, alphanumeric1, anychar, line_ending, newline, space0, space1, multispace0},
-        is_space,
-    },
-    combinator::{eof, map, map_res, not, opt, recognize, rest, value, all_consuming},
-    multi::{many0, many_till, separated_list0},
-    sequence::{delimited, pair, terminated, tuple},
+    bytes::complete::{is_not, tag, take_until},
+    character::complete::{alpha1, alphanumeric1, multispace0, newline, space0},
+    combinator::{map, map_res, opt, recognize, rest, value},
+    multi::many0,
+    sequence::{delimited, pair, tuple},
     IResult,
 };
 
@@ -38,20 +35,16 @@ fn assignment(input: &str) -> IResult<&str, &str> {
     recognize(delimited(space0, tag("="), space0))(input)
 }
 
-fn interpolate(input: &str) -> IResult<&str, &str> {
-    recognize(tuple((tag("$"), delimited(tag("{"), ident, tag("}")))))(input)
-}
-
 fn comment(input: &str) -> IResult<&str, &str> {
     recognize(tuple((
         space0,
         tag("#"),
-        alt((take_until("\n"), take_until("\r\n"), rest))
+        alt((take_until("\n"), take_until("\r\n"), rest)),
     )))(input)
 }
 
 fn unquoted(input: &str) -> IResult<&str, &str> {
-    let terminated = alt((take_until(" "), take_until(" #"), take_until("#"), rest));
+    let terminated = alt((take_until(" #"), take_until("#"), take_until(" "), rest));
     recognize(terminated)(input)
 }
 
@@ -93,7 +86,7 @@ fn env_value<'a>(input: &str) -> IResult<&str, &str> {
             unquoted,
         )),
         space0,
-        opt(comment),
+        opt(take_until("#")),
     ));
     map_res(core, |(s, _, _)| -> Result<&str, Infallible> { Ok(s) })(input)
 }
@@ -119,9 +112,25 @@ fn statement<'a>(input: &'a str) -> IResult<&str, Statement<'a>> {
     )(input)
 }
 
+/// Any valid statement in the grammar. Includes empty lines and comments.
+fn valid_statement<'a>(input: &'a str) -> IResult<&str, Option<Statement<'a>>> {
+    alt((
+        map(statement, |r| Some(r)),
+        map(comment, |_| None),
+        map(tuple((newline, multispace0)), |_| None),
+    ))(input)
+}
+
 pub fn envfile<'a>(input: &'a str) -> IResult<&str, Vec<Statement<'a>>> {
-    let file = many0(delimited(multispace0, statement, multispace0));
-    all_consuming(file)(input)
+    let file = many0(valid_statement);
+    map_res(file, |v| -> Result<Vec<Statement>, Infallible> {
+        Ok(v.iter()
+            .filter_map(|v| match v {
+                Some(s) => Some(s.clone()),
+                _ => None,
+            })
+            .collect())
+    })(input)
 }
 
 #[cfg(test)]
@@ -141,11 +150,13 @@ mod test {
     #[test]
     fn test_comment() {
         assert_eq!(comment(" # comment"), Ok(("", " # comment")));
+        assert_eq!(comment("####### many #"), Ok(("", "####### many #")));
     }
 
     #[test]
     fn test_singles() {
         assert_eq!(single_quoted("\'some value\'"), Ok(("", "some value")));
+        assert_ne!(single_quoted("\'uneven"), Ok(("", "")));
     }
 
     #[test]
@@ -219,17 +230,35 @@ test
                 }
             ))
         );
+        assert_eq!(
+            statement("TEST=value # with comment at end"),
+            Ok((
+                "",
+                Statement {
+                    key: "TEST",
+                    value: "value",
+                }
+            ))
+        );
+        assert_eq!(
+            statement("export SOME_VAL= # no value"),
+            Ok((
+                "",
+                Statement {
+                    key: "SOME_VAL",
+                    value: "",
+                }
+            ))
+        );
     }
 
     #[test]
     fn test_envfile() {
         let (r, ss) = envfile(
-            " \
-TEST=value # with comment at end\n \
+            "TEST=value # with comment at end\n \
 export SOME_VAL= # no value",
         )
         .expect("thing");
-        println!("{:?} {:?}", r, ss);
         assert_eq!(r, "");
         assert_eq!(ss.len(), 2);
         assert_eq!(
