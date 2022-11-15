@@ -85,10 +85,9 @@ fn env_value<'a>(input: &str) -> IResult<&str, &str> {
             single_quoted,
             unquoted,
         )),
-        space0,
-        opt(take_until("#")),
+        opt(tuple((space0, take_until("#")))),
     ));
-    map_res(core, |(s, _, _)| -> Result<&str, Infallible> { Ok(s) })(input)
+    map_res(core, |(s, _)| -> Result<&str, Infallible> { Ok(s) })(input)
 }
 
 /// A statement assigning some value to a key.
@@ -115,9 +114,10 @@ fn statement<'a>(input: &'a str) -> IResult<&str, Statement<'a>> {
 /// Any valid statement in the grammar. Includes empty lines and comments.
 fn valid_statement<'a>(input: &'a str) -> IResult<&str, Option<Statement<'a>>> {
     alt((
+        map(newline, |_| None),
+        map(tuple((newline, multispace0, newline)), |_| None),
         map(statement, |r| Some(r)),
         map(comment, |_| None),
-        map(tuple((newline, multispace0)), |_| None),
     ))(input)
 }
 
@@ -136,6 +136,8 @@ pub fn envfile<'a>(input: &'a str) -> IResult<&str, Vec<Statement<'a>>> {
 #[cfg(test)]
 mod test {
     use super::*;
+
+    const EXAMPLE_ENV: &'static str = include_str!("../example.env");
 
     #[derive(Debug, Clone, PartialEq, Eq)]
     struct Error;
@@ -165,6 +167,10 @@ mod test {
         assert_eq!(
             double_quoted("\"some\nmultiline\nval\"").map_err(|_| Error),
             Err(Error)
+        );
+        assert_eq!(
+            double_quoted("\"MultipleLines and variable substitution: ${SIMPLE}\""),
+            Ok(("", "MultipleLines and variable substitution: ${SIMPLE}"))
         );
     }
 
@@ -250,15 +256,19 @@ test
                 }
             ))
         );
+        assert_eq!(statement("INTERPOLATED=\"MultipleLines and variable substitution: ${SIMPLE}\""), Ok(( "", Statement {
+            key: "INTERPOLATED",
+            value: "MultipleLines and variable substitution: ${SIMPLE}",
+        })));
     }
 
     #[test]
     fn test_envfile() {
         let (r, ss) = envfile(
-            "TEST=value # with comment at end\n \
+            "TEST=value # with comment at end\n\
 export SOME_VAL= # no value",
         )
-        .expect("thing");
+        .expect("parse");
         assert_eq!(r, "");
         assert_eq!(ss.len(), 2);
         assert_eq!(
@@ -272,5 +282,7 @@ export SOME_VAL= # no value",
             .iter()
             .find(|a| a.key == "TEST" && a.value == "value")
             .is_some());
+        let (r, ss) = envfile(EXAMPLE_ENV).expect("parse");
+        assert_eq!(r, "");
     }
 }
