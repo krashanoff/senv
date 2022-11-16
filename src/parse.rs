@@ -10,8 +10,8 @@ use std::convert::Infallible;
 use nom::{
     branch::alt,
     bytes::complete::{is_not, tag, take_until},
-    character::complete::{alpha1, alphanumeric1, multispace0, newline, space0},
-    combinator::{map, map_res, opt, recognize, rest, value},
+    character::complete::{alpha1, alphanumeric1, line_ending, multispace0, newline, space0},
+    combinator::{eof, map, map_res, opt, recognize, rest, value},
     multi::many0,
     sequence::{delimited, pair, tuple},
     IResult,
@@ -113,12 +113,16 @@ fn statement<'a>(input: &'a str) -> IResult<&str, Statement<'a>> {
 
 /// Any valid statement in the grammar. Includes empty lines and comments.
 fn valid_statement<'a>(input: &'a str) -> IResult<&str, Option<Statement<'a>>> {
-    alt((
-        map(newline, |_| None),
-        map(tuple((newline, multispace0, newline)), |_| None),
-        map(statement, |r| Some(r)),
+    let legal_line = alt((
+        map(space0, |_| None),
         map(comment, |_| None),
-    ))(input)
+        map(statement, |r| Some(r)),
+    ));
+
+    map(
+        tuple((opt(legal_line), space0, alt((line_ending, eof)))),
+        |(a, _, _)| a.unwrap(),
+    )(input)
 }
 
 pub fn envfile<'a>(input: &'a str) -> IResult<&str, Vec<Statement<'a>>> {
@@ -159,6 +163,10 @@ mod test {
     fn test_singles() {
         assert_eq!(single_quoted("\'some value\'"), Ok(("", "some value")));
         assert_ne!(single_quoted("\'uneven"), Ok(("", "")));
+        assert_eq!(
+            single_quoted("'raw text without variable interpolation'"),
+            Ok(("", "raw text without variable interpolation"))
+        );
     }
 
     #[test]
@@ -256,10 +264,16 @@ test
                 }
             ))
         );
-        assert_eq!(statement("INTERPOLATED=\"MultipleLines and variable substitution: ${SIMPLE}\""), Ok(( "", Statement {
-            key: "INTERPOLATED",
-            value: "MultipleLines and variable substitution: ${SIMPLE}",
-        })));
+        assert_eq!(
+            statement("INTERPOLATED=\"MultipleLines and variable substitution: ${SIMPLE}\""),
+            Ok((
+                "",
+                Statement {
+                    key: "INTERPOLATED",
+                    value: "MultipleLines and variable substitution: ${SIMPLE}",
+                }
+            ))
+        );
     }
 
     #[test]
