@@ -10,9 +10,9 @@ use std::convert::Infallible;
 use nom::{
     branch::alt,
     bytes::complete::{is_not, tag, take_until},
-    character::complete::{alpha1, alphanumeric1, line_ending, multispace0, newline, space0},
-    combinator::{eof, map, map_res, opt, recognize, rest, value},
-    multi::many0,
+    character::complete::{alpha1, alphanumeric1, char, line_ending, multispace0, newline, space0},
+    combinator::{eof, map, map_res, not, opt, recognize, rest, value},
+    multi::{many0, separated_list0},
     sequence::{delimited, pair, tuple},
     IResult,
 };
@@ -30,22 +30,30 @@ fn ident(input: &str) -> IResult<&str, &str> {
     recognize(ident)(input)
 }
 
-/// the part before the equals
-fn assignment(input: &str) -> IResult<&str, &str> {
-    recognize(delimited(space0, tag("="), space0))(input)
+/// equals
+fn assignment(input: &str) -> IResult<&str, ()> {
+    value((), char('='))(input)
 }
 
-fn comment(input: &str) -> IResult<&str, &str> {
-    recognize(tuple((
-        space0,
-        tag("#"),
-        alt((take_until("\n"), take_until("\r\n"), rest)),
-    )))(input)
+fn comment(input: &str) -> IResult<&str, ()> {
+    value(
+        (),
+        tuple((
+            space0,
+            char('#'),
+            alt((take_until("\n"), take_until("\r\n"), rest)),
+        )),
+    )(input)
 }
 
+/// Some unquoted value. Just read to the first occurrence of a space
+/// or a newline or EOF or a comment.
 fn unquoted(input: &str) -> IResult<&str, &str> {
-    let terminated = alt((take_until(" #"), take_until("#"), take_until(" "), rest));
-    recognize(terminated)(input)
+    let until_whitespace = alt((is_not(" "), is_not("\n\r")));
+    map(
+        tuple((until_whitespace, value((), comment))),
+        |(value, _other)| value,
+    )(input)
 }
 
 /// no interpolation
@@ -77,20 +85,17 @@ fn multi_squote(input: &str) -> IResult<&str, &str> {
 }
 
 fn env_value<'a>(input: &str) -> IResult<&str, &str> {
-    let core = tuple((
-        alt((
-            multi_dquote,
-            multi_squote,
-            double_quoted,
-            single_quoted,
-            unquoted,
-        )),
-        opt(tuple((space0, take_until("#")))),
+    let core = alt((
+        multi_dquote,
+        multi_squote,
+        double_quoted,
+        single_quoted,
+        unquoted,
     ));
-    map_res(core, |(s, _)| -> Result<&str, Infallible> { Ok(s) })(input)
+    map_res(core, |s| -> Result<&str, Infallible> { Ok(s) })(input)
 }
 
-/// A statement assigning some value to a key.
+/// A statement assigning some value to a key. Doesn't include a newline.
 fn statement<'a>(input: &'a str) -> IResult<&str, Statement<'a>> {
     map_res(
         tuple((
@@ -103,9 +108,9 @@ fn statement<'a>(input: &'a str) -> IResult<&str, Statement<'a>> {
         |(_export, key, _equals, value, _comment): (
             Option<&str>,
             &str,
+            (),
             &str,
-            &str,
-            Option<&str>,
+            Option<()>,
         )|
          -> Result<Statement<'a>, Infallible> { Ok(Statement { key, value }) },
     )(input)
@@ -126,7 +131,7 @@ fn valid_statement<'a>(input: &'a str) -> IResult<&str, Option<Statement<'a>>> {
 }
 
 pub fn envfile<'a>(input: &'a str) -> IResult<&str, Vec<Statement<'a>>> {
-    let file = many0(valid_statement);
+    let file = separated_list0(newline, valid_statement);
     map_res(file, |v| -> Result<Vec<Statement>, Infallible> {
         Ok(v.iter()
             .filter_map(|v| match v {
@@ -155,8 +160,8 @@ mod test {
 
     #[test]
     fn test_comment() {
-        assert_eq!(comment(" # comment"), Ok(("", " # comment")));
-        assert_eq!(comment("####### many #"), Ok(("", "####### many #")));
+        assert_eq!(comment(" # comment"), Ok(("", ())));
+        assert_eq!(comment("####### many #"), Ok(("", ())));
     }
 
     #[test]
@@ -185,14 +190,11 @@ mod test {
     #[test]
     fn test_unquoted() {
         assert_eq!(unquoted("value"), Ok(("", "value")));
-        assert_eq!(
-            unquoted("value # with comment"),
-            Ok((" # with comment", "value"))
-        );
+        assert_eq!(unquoted("value # with comment"), Ok(("", "value")));
     }
 
     #[test]
-    fn test_multi() {
+    fn test_multi_quote() {
         assert_eq!(multi_squote("'''test\n'''"), Ok(("", "test\n")));
         assert_eq!(
             multi_squote(
@@ -217,6 +219,16 @@ test
 '''"
             ),
             Ok(("", "\nsome value!!\n"))
+        );
+    }
+
+    #[test]
+    fn test_env_value() {
+        assert_eq!(env_value("unquoted no"), Ok((" no", "unquoted")));
+        assert_eq!(env_value("\"unquoted no\""), Ok(("", "unquoted no")));
+        assert_eq!(
+            env_value("\'unquoted no\"\"another value\'"),
+            Ok(("", "unquoted no\"\"another value"))
         );
     }
 
@@ -277,12 +289,22 @@ test
     }
 
     #[test]
-    fn test_envfile() {
-        let (r, ss) = envfile(
-            "TEST=value # with comment at end\n\
-export SOME_VAL= # no value",
+    fn test_multiple_statement() {
+        assert_eq!(
+            statement("export TEST_THING=hi\nANOTHER_KEY=\"EQUALS A THING\"\n"),
+            Ok((
+                "",
+                Statement {
+                    key: "TEST_THING",
+                    value: "hi",
+                }
+            ))
         )
-        .expect("parse");
+    }
+
+    #[test]
+    fn test_envfile() {
+        let (r, ss) = envfile(EXAMPLE_ENV).expect("parse");
         assert_eq!(r, "");
         assert_eq!(ss.len(), 2);
         assert_eq!(
