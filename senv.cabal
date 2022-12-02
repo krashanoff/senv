@@ -6,28 +6,32 @@ version:            0.1.0.0
 synopsis: Parse and convert .env files.
 
 -- A longer description of the package.
--- description:
+description: See the README on GitHub (<https://github.com/krashanoff/senv#README>)
 
 -- A URL where users can report bugs.
--- bug-reports:
+bug-reports: https://github.com/krashanoff/senv/issues
 
 -- The license under which the package is released.
 -- license:
 author:             Leonid Krashanoff
 maintainer:         leo@krashanoff.com
+license:            MIT
+license-file:       LICENSE
 
 -- A copyright notice.
 -- copyright:
 category: Command Line Tools
-extra-source-files: CHANGELOG.md
+extra-source-files:
+    CHANGELOG.md
+    LICENSE
 
 library
     exposed-modules:
         MyLib
-        Fancy
 
     -- Modules included in this library but not exported.
-    -- other-modules:
+    other-modules:
+        Fancy
 
     -- LANGUAGE extensions used by modules in this package.
     -- other-extensions:

@@ -1,6 +1,7 @@
 module MyLib (
     Statement
   , parseStatement
+  , parseFile
 ) where
 
 import Text.Parsec
@@ -69,7 +70,7 @@ optionalExport = option () (fmap (const ()) (string "export" >> spaces))
 statement :: Parsec String () ()
 statement = optionalExport >> keyIdentifier >> assignment >> someValue >> (option () ignoreComment)
 
-file = (many statement >> eof) <|> eof
+file = (many (choice [comment, statement]) >> eof) <|> eof
 
 parseFile = parse file ""
 

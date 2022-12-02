@@ -1,5 +1,8 @@
 module Main where
 
+import MyLib
+
 main :: IO ()
 main = do
-  putStrLn "Hello, Haskell!"
+  input <- getContents
+  print $ parseFile input
