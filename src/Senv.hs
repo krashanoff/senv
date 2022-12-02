@@ -1,12 +1,10 @@
-module MyLib (
+module Senv (
     Statement
   , parseStatement
   , parseFile
 ) where
 
 import Text.Parsec
-
-someFunc = putStrLn "someFunc"
 
 -- |AST for an env file.
 data Statement =
@@ -72,6 +70,8 @@ statement = optionalExport >> keyIdentifier >> assignment >> someValue >> (optio
 
 file = (many (choice [comment, statement]) >> eof) <|> eof
 
+-- |Parse a .env file into something manageable.
 parseFile = parse file ""
 
+-- |Parse a statement from an .env file. Potentially useful for testing.
 parseStatement = parse statement ""

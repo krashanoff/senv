@@ -2,24 +2,15 @@ cabal-version:      2.4
 name:               senv
 version:            0.1.0.0
 
--- A short (one-line) description of the package.
 synopsis: Parse and convert .env files.
-
--- A longer description of the package.
 description: See the README on GitHub (<https://github.com/krashanoff/senv#README>)
-
--- A URL where users can report bugs.
 bug-reports: https://github.com/krashanoff/senv/issues
 
--- The license under which the package is released.
--- license:
 author:             Leonid Krashanoff
 maintainer:         leo@krashanoff.com
 license:            MIT
 license-file:       LICENSE
 
--- A copyright notice.
--- copyright:
 category: Command Line Tools
 extra-source-files:
     CHANGELOG.md
@@ -27,14 +18,10 @@ extra-source-files:
 
 library
     exposed-modules:
-        MyLib
+        Senv
 
-    -- Modules included in this library but not exported.
     other-modules:
-        Fancy
 
-    -- LANGUAGE extensions used by modules in this package.
-    -- other-extensions:
     build-depends:
         base ^>=4.16.4.0,
         parsec ^>=3.1.15.1
@@ -58,7 +45,7 @@ executable senv
 
 test-suite test-lib
     type: exitcode-stdio-1.0
-    main-is: LibTest.hs
+    main-is: Test.hs
     hs-source-dirs:
         test
     ghc-options: -threaded -rtsopts -with-rtsopts=-N

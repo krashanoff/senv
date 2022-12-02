@@ -1,6 +1,6 @@
 module Main where
 
-import MyLib
+import Senv
 
 main :: IO ()
 main = do
