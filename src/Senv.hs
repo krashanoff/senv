@@ -13,7 +13,6 @@ data Statement =
   Identifier String |
   Comment String |
   Assignment Statement Statement |
-  InterpolatedValue String |
   Key String |
   Value String
   deriving (Show, Eq)
@@ -39,7 +38,7 @@ keyIdentifier = do
 
 comment :: Parsec String () Statement
 comment = do
-  string "# "
+  char '#'
   content <- manyTill anyChar (try (choice [toss endOfLine, eof]))
   return $ Comment content
 
@@ -50,7 +49,7 @@ assignment = char '='
 unquoted :: Parsec String () String
 unquoted = do
   Key val <- keyIdentifier
-  try comment
+  option () (toss $ try comment)
   return val
 
 quotedBy :: Either Char String -> Parsec String () String
@@ -77,8 +76,8 @@ someValueStr = option ("")
   , blockQuotedEscaped
   , blockQuoted
   , doubleQuoted
-  , singleQuoted
-  ])
+  ]
+  ++ [singleQuoted])
 
 someValue :: Parsec String () Statement
 someValue = fmap (Value) someValueStr
@@ -107,22 +106,43 @@ statement = do
 statementWithNewLine :: Parsec String () Statement
 statementWithNewLine = do
   result <- statement
-  endOfLine
+  choice [fmap (const ()) endOfLine, try eof]
   return result
+
+validStatement :: Parsec String () (Maybe Statement)
+validStatement =
+  let emptyLine = spaces >> tossEOL in
+  (fmap Just statementWithNewLine)
+  <|> (fmap Just comment) 
+  <|> (fmap (const Nothing) emptyLine)
+
+-- |A valid line in a .env file.
+validLine :: Parsec String () (Maybe Statement)
+validLine = do
+  result <- try validStatement
+  return result
+
+foldMaybes :: [Maybe a] -> [a]
+foldMaybes = foldl (\a b -> case b of
+  Just d -> d : a
+  Nothing -> a)
+  []
 
 file :: Parsec String () [Statement]
 file = do
-    firstStatements <- option [] (many statementWithNewLine)
-    optionalLast <- option Nothing (fmap (Just) (try $ choice [comment, statement]))
-    many (choice [spaces, tossEOL])
-    eof
-    return $ case optionalLast of
-      Just l -> firstStatements ++ [l]
-      Nothing -> firstStatements
+  lines <- option [] $ many validLine
+  eof
+  return $ foldMaybes lines
+
+emptyFile :: Parsec String () [Statement]
+emptyFile = do
+  many (spaces >> tossEOL)
+  eof
+  return []
 
 -- |Parse a .env file into something manageable.
 parseEnv :: String -> Either ParseError [Statement]
-parseEnv = parse file ""
+parseEnv = parse (file <|> emptyFile) ""
 
 -- |Parse a statement from an .env file. Potentially useful for testing.
 parseStatement :: String -> Either ParseError Statement

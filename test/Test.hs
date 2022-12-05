@@ -8,10 +8,10 @@ import Senv
 main = defaultMain tests
 
 tests :: TestTree
-tests = testGroup "Tests" [unitTest]
+tests = testGroup "Tests" [statementTests, fileTests]
 
-unitTest = testGroup "statements"
-  [
+statementTests = testGroup "statements"
+    [
       testCase "trivial" $ do
         parseStatement "KEY=VAL"
         @?=
@@ -28,7 +28,7 @@ unitTest = testGroup "statements"
             (Key "SOME_VAL")
             (Value "")
         )
-    , testCase "optional export, no value" $ do
+    , testCase "optional export, no value, with comment" $ do
         parseStatement "export  SOME_VAL= # no value"
         @?=
         Right (
@@ -42,4 +42,20 @@ unitTest = testGroup "statements"
             Left (e) -> False
             otherwise -> True
         ))
-  ]
+    ]
+
+fileTests = testGroup "file"
+    [
+      testCase "trailing newline" $
+        parseEnv "export SOME_VAL= # no comment\n"
+        @?=
+        Right [
+            Assignment
+            (Key "SOME_VAL")
+            (Value "")
+        ]
+    , testCase "empty file" $
+        parseEnv ""
+        @?=
+        Right []
+    ]
