@@ -4,5 +4,5 @@ import Senv
 
 main :: IO ()
 main = do
-  input <- getContents
-  print $ parseFile input
+  parsed <- fmap parseEnv getContents
+  putStrLn $ show parsed
