@@ -46,11 +46,12 @@ comment = do
 assignment :: Parsec String () Char
 assignment = char '='
 
-unquoted :: Parsec String () String
+unquoted :: Parsec String () Statement
 unquoted = do
   Key val <- keyIdentifier
   option () (toss $ try comment)
-  return val
+  (toss endOfLine) <|> eof
+  return $ Value val
 
 quotedBy :: Either Char String -> Parsec String () String
 quotedBy (Left c) = do
@@ -72,12 +73,11 @@ someValueStr :: Parsec String () String
 someValueStr = option ("")
   (choice
   $ fmap (try) [
-    unquoted
-  , blockQuotedEscaped
+    blockQuotedEscaped
   , blockQuoted
   , doubleQuoted
-  ]
-  ++ [singleQuoted])
+  , singleQuoted
+  ])
 
 someValue :: Parsec String () Statement
 someValue = fmap (Value) someValueStr
@@ -113,7 +113,8 @@ validStatement :: Parsec String () (Maybe Statement)
 validStatement =
   let emptyLine = spaces >> tossEOL in
   (fmap Just statementWithNewLine)
-  <|> (fmap Just comment) 
+  <|> (fmap Just unquoted)
+  <|> (fmap Just comment)
   <|> (fmap (const Nothing) emptyLine)
 
 -- |A valid line in a .env file.

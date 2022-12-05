@@ -58,4 +58,26 @@ fileTests = testGroup "file"
         parseEnv ""
         @?=
         Right []
+    , testCase "trailing assignment" $
+        parseEnv "a=\nb=\nc="
+        @?=
+        Right [
+            Assignment
+            (Key "c")
+            (Value "")
+            , Assignment
+            (Key "b")
+            (Value "")
+            , Assignment
+            (Key "a")
+            (Value "")
+        ]
+    , testCase "double-newline" $
+        parseEnv "a=\"\"\n\nc=\"\""
+        @?=
+        Right [
+            Assignment
+            (Key "a")
+            (Value "")
+        ]
     ]
