@@ -84,11 +84,11 @@ someValueStr :: Parsec String () String
 someValueStr = option ("")
   (choice
   $ [
-    emptyValueStr
-  , blockQuotedEscaped
+   blockQuotedEscaped
   , blockQuoted
   , doubleQuoted
   , singleQuoted
+  , emptyValueStr
   ])
 
 someValue :: Parsec String () Statement
