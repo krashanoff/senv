@@ -14,7 +14,8 @@ data Statement =
   Comment String |
   Assignment Statement Statement |
   Key String |
-  Value String
+  Value String |
+  Newline
   deriving (Show, Eq)
 
 -- |Initial character for some unquoted value or an identifier.
@@ -38,19 +39,29 @@ keyIdentifier = do
 
 comment :: Parsec String () Statement
 comment = do
-  char '#'
-  content <- manyTill anyChar (try (choice [toss endOfLine, eof]))
+  try (char '#')
+  content <- manyTill anyChar ((toss endOfLine) <|> eof)
   return $ Comment content
 
 -- |Identifies the assignment operator '='.
 assignment :: Parsec String () Char
 assignment = char '='
 
+emptyValueNoQuote :: Parsec String () Char
+emptyValueNoQuote = fmap (const '\'') endOfLine
+emptySingle :: Parsec String () Char
+emptySingle = char '\'' >> char '\''
+emptyDouble :: Parsec String () Char
+emptyDouble = char '"' >> char '"'
+
+emptyValueStr :: Parsec String () String
+emptyValueStr = do
+  choice [emptySingle, emptyDouble, emptyValueNoQuote]
+  return ""
+
 unquoted :: Parsec String () Statement
 unquoted = do
   Key val <- keyIdentifier
-  option () (toss $ try comment)
-  (toss endOfLine) <|> eof
   return $ Value val
 
 quotedBy :: Either Char String -> Parsec String () String
@@ -72,8 +83,9 @@ blockQuotedEscaped = quotedBy (Right "\"\"\"")
 someValueStr :: Parsec String () String
 someValueStr = option ("")
   (choice
-  $ fmap (try) [
-    blockQuotedEscaped
+  $ [
+    emptyValueStr
+  , blockQuotedEscaped
   , blockQuoted
   , doubleQuoted
   , singleQuoted
@@ -88,57 +100,39 @@ optionalComment = option () (toss (spaces >> comment))
 optionalExport :: Parsec String () ()
 optionalExport = option () (toss (string "export" >> spaces))
 
-tossEOL :: Parsec String () ()
-tossEOL = toss endOfLine
-
 toss :: Functor f0 => f0 a -> f0 ()
 toss = fmap (const ())
+
+tossEOL :: Parsec String () ()
+tossEOL = toss endOfLine
 
 statement :: Parsec String () Statement
 statement = do
   optionalExport
   key <- keyIdentifier
   assignment
-  val <- someValue
+  val <- unquoted <|> someValue
   option () $ try optionalComment
   return (Assignment key val)
 
-statementWithNewLine :: Parsec String () Statement
-statementWithNewLine = do
-  result <- statement
-  choice [fmap (const ()) endOfLine, try eof]
-  return result
+-- |Instead of Parsec's `spaces`, which includes EOL characters.
+inlineWhitespace = many $ oneOf " \t"
 
-validStatement :: Parsec String () (Maybe Statement)
-validStatement =
-  let emptyLine = spaces >> tossEOL in
-  (fmap Just statementWithNewLine)
-  <|> (fmap Just unquoted)
-  <|> (fmap Just comment)
-  <|> (fmap (const Nothing) emptyLine)
+emptyLine :: Parsec String () Statement
+emptyLine = fmap (const Newline) $ (inlineWhitespace >> tossEOL)
 
--- |A valid line in a .env file.
-validLine :: Parsec String () (Maybe Statement)
-validLine = do
-  result <- try validStatement
-  return result
-
-foldMaybes :: [Maybe a] -> [a]
-foldMaybes = foldl (\a b -> case b of
-  Just d -> d : a
-  Nothing -> a)
-  []
+validStatement :: Parsec String () Statement
+validStatement = emptyLine <|> comment <|> statement
 
 file :: Parsec String () [Statement]
 file = do
-  lines <- option [] $ many validLine
+  lines <- option [] $ many validStatement
   eof
-  return $ foldMaybes lines
+  return lines
 
 emptyFile :: Parsec String () [Statement]
 emptyFile = do
-  many (spaces >> tossEOL)
-  eof
+  manyTill (spaces >> tossEOL) (try eof)
   return []
 
 -- |Parse a .env file into something manageable.
@@ -147,4 +141,4 @@ parseEnv = parse (file <|> emptyFile) ""
 
 -- |Parse a statement from an .env file. Potentially useful for testing.
 parseStatement :: String -> Either ParseError Statement
-parseStatement = parse statement ""
+parseStatement = parse validStatement ""

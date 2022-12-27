@@ -20,8 +20,16 @@ statementTests = testGroup "statements"
             (Key "KEY")
             (Value "VAL")
         )
-    , testCase "no value" $ do
+    , testCase "no value no quote" $ do
         parseStatement "SOME_VAL="
+        @?=
+        Right (
+            Assignment
+            (Key "SOME_VAL")
+            (Value "")
+        )
+    , testCase "no value double quote" $ do
+        parseStatement "SOME_VAL=\"\""
         @?=
         Right (
             Assignment
@@ -42,6 +50,10 @@ statementTests = testGroup "statements"
             Left (e) -> False
             otherwise -> True
         ))
+    , testCase "empty" $
+        parseStatement "\n"
+        @?=
+        Right Newline
     ]
 
 fileTests = testGroup "file"
@@ -63,21 +75,26 @@ fileTests = testGroup "file"
         @?=
         Right [
             Assignment
-            (Key "c")
+            (Key "a")
             (Value "")
             , Assignment
             (Key "b")
             (Value "")
             , Assignment
-            (Key "a")
+            (Key "c")
             (Value "")
         ]
-    , testCase "double-newline" $
+    , testCase "double newline" $
         parseEnv "a=\"\"\n\nc=\"\""
         @?=
         Right [
             Assignment
             (Key "a")
+            (Value "")
+            , Newline
+            , Newline
+            , Assignment
+            (Key "c")
             (Value "")
         ]
     ]
