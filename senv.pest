@@ -1,0 +1,51 @@
+whitespace_nomatch = _{ " "+ }
+whitespace = _{ " " }
+
+comment_or_emptyline = { ("#" ~ (ASCII_ALPHANUMERIC | whitespace)*) | NEWLINE }
+
+env_key = { ("_" | ASCII_ALPHA) ~ ("_" | ASCII_ALPHANUMERIC)+ }
+
+// Interpolations can appear in a few spots.
+braced_interpolation = { "${" ~ env_key ~ "}" }
+unbraced_interpolation = { "$" ~ env_key }
+interpolation = { braced_interpolation | unbraced_interpolation }
+
+// Unquoted value characters are different from quoted ones.
+unquoted_character = { ASCII_ALPHANUMERIC }
+unquoted_value = {
+	(unquoted_character+ ~ interpolation? ~ unquoted_character*)
+    | interpolation
+}
+
+quoted_character = { ASCII_ALPHANUMERIC | "$" | "{" | "}" | "_" | whitespace }
+quoted_value = { quoted_character* }
+multiline_value = { (quoted_character | NEWLINE)* }
+
+// There are a few different kinds of values in .env files.
+unquoted = { unquoted_value }
+single_quoted = _{ "'" ~ quoted_value ~ "'" }
+double_quoted = _{ "\"" ~ quoted_value ~ "\"" }
+triple_single = _{ "'''" ~ multiline_value ~ "'''" }
+triple_double = _{ "\"\"\"" ~ multiline_value ~ "\"\"\"" }
+
+env_value = _{
+  triple_single |
+  triple_double |
+  single_quoted |
+  double_quoted
+}
+
+assignment = { env_key ~ "=" ~
+  (
+    (whitespace_nomatch? ~ unquoted) |
+    env_value
+  )?
+}
+
+file = {
+  SOI
+  ~ ((assignment ~ NEWLINE) | (comment_or_emptyline ~ NEWLINE))*
+  ~ (assignment | comment_or_emptyline)?
+  ~ NEWLINE?
+  ~ EOI
+}

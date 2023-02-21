@@ -1,18 +1,11 @@
 [package]
-name = "denv"
-description = "agnostic .env"
+name = "senv"
+description = "Agnostic .env"
 authors = ["Leonid Krashanoff <leo@krashanoff.com>"]
 version = "0.1.0"
 edition = "2021"
 
-[lib]
-name = "senv"
-path = "src/lib.rs"
-
-[[bin]]
-name = "senv"
-path = "src/cmd/main.rs"
-
 [dependencies]
 clap = { version = "4", default-features = false, features = ["std", "help", "usage", "derive"] }
-nom = "7"
+pest = "2"
+pest_derive = "2"
