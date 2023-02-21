@@ -21,9 +21,9 @@ impl Display for Error {
     }
 }
 
-pub fn parse<'a>(input: &'a str) -> Result<Vec<Statement<'a>>, Error> {
-    match parse::envfile(input).map_err(|e| Error::Nom(e.to_string()))? {
-        ("", s) => Ok(s),
-        (s, _) => Err(Error::FailedToConsume(s.to_string())),
-    }
-}
+// pub fn parse<'a>(input: &'a str) -> Result<Vec<Statement<'a>>, Error> {
+//     match parse::envfile(input).map_err(|e| Error::Nom(e.to_string()))? {
+//         ("", s) => Ok(s),
+//         (s, _) => Err(Error::FailedToConsume(s.to_string())),
+//     }
+// }

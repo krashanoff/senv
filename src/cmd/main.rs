@@ -2,7 +2,7 @@ use std::{fs::OpenOptions, io::Read, path::PathBuf};
 
 use clap::Parser;
 
-use senv::parse;
+// use senv::parse;
 
 #[derive(Parser)]
 #[clap(version, author)]
@@ -24,6 +24,6 @@ fn main() {
     let mut s = String::new();
     f.read_to_string(&mut s).expect("read");
 
-    let s = parse(s.as_str()).expect("parse");
-    println!("{:?}", s);
+    // let s = parse(s.as_str()).expect("parse");
+    // println!("{:?}", s);
 }

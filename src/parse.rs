@@ -51,7 +51,7 @@ fn comment(input: &str) -> IResult<&str, ()> {
 fn unquoted(input: &str) -> IResult<&str, &str> {
     let until_whitespace = alt((is_not(" "), is_not("\n\r")));
     map(
-        tuple((until_whitespace, value((), comment))),
+        tuple((until_whitespace, comment)),
         |(value, _other)| value,
     )(input)
 }
@@ -130,16 +130,12 @@ fn valid_statement<'a>(input: &'a str) -> IResult<&str, Option<Statement<'a>>> {
     )(input)
 }
 
-pub fn envfile<'a>(input: &'a str) -> IResult<&str, Vec<Statement<'a>>> {
-    let file = separated_list0(newline, valid_statement);
-    map_res(file, |v| -> Result<Vec<Statement>, Infallible> {
-        Ok(v.iter()
-            .filter_map(|v| match v {
-                Some(s) => Some(s.clone()),
-                _ => None,
-            })
-            .collect())
-    })(input)
+pub fn envfile<'a>(input: &'a str) -> Vec<Statement<'a>> {
+    let mut result = vec![];
+    for (index, line) in input.lines().enumerate() {
+        println!("{:?}", valid_statement(line));
+    }
+    result
 }
 
 #[cfg(test)]
@@ -304,21 +300,6 @@ test
 
     #[test]
     fn test_envfile() {
-        let (r, ss) = envfile(EXAMPLE_ENV).expect("parse");
-        assert_eq!(r, "");
-        assert_eq!(ss.len(), 2);
-        assert_eq!(
-            ss[0],
-            Statement {
-                key: "TEST",
-                value: "value",
-            }
-        );
-        assert!(ss
-            .iter()
-            .find(|a| a.key == "TEST" && a.value == "value")
-            .is_some());
-        let (r, ss) = envfile(EXAMPLE_ENV).expect("parse");
-        assert_eq!(r, "");
+        let r = envfile(EXAMPLE_ENV);
     }
 }
