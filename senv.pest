@@ -1,7 +1,6 @@
-whitespace_nomatch = _{ " "+ }
 whitespace = _{ " " }
 
-comment_or_emptyline = { ("#" ~ (ASCII_ALPHANUMERIC | whitespace)*) | NEWLINE }
+comment = { whitespace* ~ "#" ~ (ASCII_ALPHANUMERIC | whitespace)* }
 
 env_key = { ("_" | ASCII_ALPHA) ~ ("_" | ASCII_ALPHANUMERIC)+ }
 
@@ -11,14 +10,14 @@ unbraced_interpolation = { "$" ~ env_key }
 interpolation = { braced_interpolation | unbraced_interpolation }
 
 // Unquoted value characters are different from quoted ones.
-unquoted_character = { ASCII_ALPHANUMERIC }
+unquoted_character = _{ ASCII_ALPHANUMERIC }
 unquoted_value = {
 	(unquoted_character+ ~ interpolation? ~ unquoted_character*)
     | interpolation
 }
 
-quoted_character = { ASCII_ALPHANUMERIC | "$" | "{" | "}" | "_" | whitespace }
-quoted_value = { quoted_character* }
+quoted_character = _{ ASCII_ALPHANUMERIC | ":" | "." | "," | "_" | whitespace }
+quoted_value = { (quoted_character | interpolation)* }
 multiline_value = { (quoted_character | NEWLINE)* }
 
 // There are a few different kinds of values in .env files.
@@ -35,17 +34,21 @@ env_value = _{
   double_quoted
 }
 
-assignment = { env_key ~ "=" ~
-  (
-    (whitespace_nomatch? ~ unquoted) |
+assignment = {
+  "export "?
+  ~ env_key
+  ~ "="
+  ~ (
+    (whitespace? ~ unquoted) |
     env_value
   )?
 }
 
+emptyline = { NEWLINE }
+line = { assignment | comment | emptyline }
+
 file = {
   SOI
-  ~ ((assignment ~ NEWLINE) | (comment_or_emptyline ~ NEWLINE))*
-  ~ (assignment | comment_or_emptyline)?
-  ~ NEWLINE?
+  ~ line*
   ~ EOI
 }

@@ -68,13 +68,10 @@ fn main() -> Result<(), Box<dyn error::Error>> {
         .expect("file");
 
     let mut bindings: HashMap<String, String> = Default::default();
-    for line in file.into_inner().filter(|line| {
-        if let Rule::assignment = line.as_rule() {
-            true
-        } else {
-            false
-        }
-    }) {
+    for line in file
+        .into_inner()
+        .filter(|line| line.as_rule() == Rule::assignment)
+    {
         let mut inner_rules = line.into_inner();
         let assignment_or_comment = inner_rules.next().expect("assignment");
 
@@ -82,4 +79,17 @@ fn main() -> Result<(), Box<dyn error::Error>> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use pest::Parser;
+
+    use crate::{EnvParser, Rule};
+
+    #[test]
+    fn test_smoke() {
+        let input = "_valid_ident=test";
+        EnvParser::parse(Rule::file, input).expect("no err");
+    }
 }
