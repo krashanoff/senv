@@ -5,18 +5,15 @@ comment = { whitespace* ~ "#" ~ (ASCII_ALPHANUMERIC | whitespace)* }
 env_key = { ("_" | ASCII_ALPHA) ~ ("_" | ASCII_ALPHANUMERIC)+ }
 
 // Interpolations can appear in a few spots.
-braced_interpolation = { "${" ~ env_key ~ "}" }
-unbraced_interpolation = { "$" ~ env_key }
+braced_interpolation = _{ "${" ~ env_key ~ "}" }
+unbraced_interpolation = _{ "$" ~ env_key }
 interpolation = { braced_interpolation | unbraced_interpolation }
 
 // Unquoted value characters are different from quoted ones.
-unquoted_character = _{ ASCII_ALPHANUMERIC }
-unquoted_value = {
-	(unquoted_character+ ~ interpolation? ~ unquoted_character*)
-    | interpolation
-}
+unquoted_character = { ASCII_ALPHANUMERIC | interpolation }
+unquoted_value = _{ (unquoted_character | interpolation)+ }
 
-quoted_character = _{ ASCII_ALPHANUMERIC | ":" | "." | "," | "_" | whitespace }
+quoted_character = { ASCII_ALPHANUMERIC | ":" | "." | "," | "_" | whitespace }
 quoted_value = { (quoted_character | interpolation)* }
 multiline_value = { (quoted_character | NEWLINE)* }
 

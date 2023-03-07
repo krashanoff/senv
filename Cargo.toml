@@ -7,5 +7,6 @@ edition = "2021"
 
 [dependencies]
 clap = { version = "4", default-features = false, features = ["std", "help", "usage", "derive"] }
+either = "1"
 pest = "2"
 pest_derive = "2"
