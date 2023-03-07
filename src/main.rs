@@ -1,6 +1,12 @@
 use std::{
-    collections::HashMap, error, fmt::Display, fs::OpenOptions, io::Read, path::PathBuf,
-    process::exit, str::FromStr,
+    collections::{HashMap, HashSet},
+    error,
+    fmt::Display,
+    fs::OpenOptions,
+    io::Read,
+    path::PathBuf,
+    process::exit,
+    str::FromStr,
 };
 
 use clap::Parser as ClapParser;
@@ -91,7 +97,19 @@ impl<'a: 'b, 'b> From<Pair<'a, Rule>> for Value<'b> {
         for character in p.into_inner() {
             match character.as_rule() {
                 Rule::quoted_character => contents.push(Either::Left(character.as_str())),
-                Rule::unquoted_character => contents.push(Either::Left(character.as_str())),
+                Rule::unquoted_character => {
+                    println!("{:?}", &character);
+                    let inner_str = character.as_str();
+                    let mut inner_rules = character.into_inner();
+                    match inner_rules.next() {
+                        Some(interpolation) => {
+                            contents.push(Either::Right(InterpolationKey(interpolation.into_inner().next().expect("msg").as_str())))
+                        }
+                        None => {
+                            contents.push(Either::Left(inner_str));
+                        }
+                    }
+                }
                 Rule::interpolation => {
                     let key = character.into_inner().next().expect("key");
                     contents.push(Either::Right(InterpolationKey(key.as_str())));
@@ -106,7 +124,12 @@ impl<'a: 'b, 'b> From<Pair<'a, Rule>> for Value<'b> {
 }
 
 impl Value<'_> {
-    fn into_string(&self, bindings: &HashMap<InterpolationKey, Value>) -> String {
+    pub fn into_string(&self, bindings: &HashMap<InterpolationKey, Value>) -> String {
+        let mut seen_set = Default::default();
+        self.into_string_inner(bindings, &mut seen_set)
+    }
+
+    fn into_string_inner<'a: 'b, 'b>(&'a self, bindings: &HashMap<InterpolationKey, Value>, seen: &mut HashSet<&'b str>) -> String {
         let mut value = String::new();
         for char_or_key in &self.0 {
             match char_or_key {
@@ -114,13 +137,17 @@ impl Value<'_> {
                     value.push_str(s);
                 }
                 Either::Right(key) => {
-                    let interpolated_value = bindings.get(&key);
-                    value.push_str(
-                        &interpolated_value
-                            .expect("interpolated value")
-                            .into_string(bindings)
-                            .as_str(),
-                    );
+                    if !seen.insert(key.0) {
+                        panic!("detected interpolation loop at key '{}'", key);
+                    }
+                    match bindings.get(&key) {
+                        Some(interpolated_value) => {
+                            value.push_str(interpolated_value.into_string(bindings).as_str());
+                        }
+                        None => {
+                            panic!("couldn't get key of interpolated value: {:?}", key);
+                        }
+                    }
                 }
             }
         }
