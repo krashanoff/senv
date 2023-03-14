@@ -2,7 +2,7 @@
 name = "senv"
 description = "Agnostic .env"
 documentation = "https://github.com/krashanoff/senv#readme"
-readme = "https://github.com/krashanoff/senv#readme"
+readme = "README.md"
 homepage = "https://github.com/krashanoff/senv"
 repository = "https://github.com/krashanoff/senv"
 license = "MIT"
