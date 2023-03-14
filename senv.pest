@@ -1,6 +1,6 @@
 whitespace = _{ " " }
 
-comment = { whitespace* ~ "#" ~ (ASCII_ALPHANUMERIC | "$" | "=" | "{" | "}" | whitespace)* }
+comment = { whitespace* ~ "#" ~ (ASCII_ALPHANUMERIC | "_" | "-" | "$" | "=" | "{" | "}" | whitespace)* }
 
 env_key = { ("_" | ASCII_ALPHA) ~ ("_" | ASCII_ALPHANUMERIC)+ }
 
@@ -10,7 +10,7 @@ unbraced_interpolation = _{ "$" ~ env_key }
 interpolation = { braced_interpolation | unbraced_interpolation }
 
 // Unquoted value characters are different from quoted ones.
-unquoted_character = { ASCII_ALPHANUMERIC | interpolation }
+unquoted_character = { ASCII_ALPHANUMERIC | "-" | interpolation }
 unquoted_value = _{ (unquoted_character | interpolation)+ }
 
 quoted_character = { ASCII_ALPHANUMERIC | ":" | "." | "," | "_" | whitespace }
