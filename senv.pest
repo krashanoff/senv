@@ -1,6 +1,6 @@
 whitespace = _{ " " }
 
-comment = { whitespace* ~ "#" ~ (ASCII_ALPHANUMERIC | whitespace)* }
+comment = { whitespace* ~ "#" ~ (ASCII_ALPHANUMERIC | "$" | "=" | "{" | "}" | whitespace)* }
 
 env_key = { ("_" | ASCII_ALPHA) ~ ("_" | ASCII_ALPHANUMERIC)+ }
 
@@ -15,13 +15,16 @@ unquoted_value = _{ (unquoted_character | interpolation)+ }
 
 quoted_character = { ASCII_ALPHANUMERIC | ":" | "." | "," | "_" | whitespace }
 quoted_value = { (quoted_character | interpolation)* }
-multiline_value = { (quoted_character | NEWLINE)* }
+multiline_value = { (quoted_character | interpolation | NEWLINE)* }
+
+multiline_value_no_interpolation_character = { "$" | "{" | "}" }
+multiline_value_no_interpolation = { (quoted_character | multiline_value_no_interpolation_character | NEWLINE)* }
 
 // There are a few different kinds of values in .env files.
 unquoted = { unquoted_value }
 single_quoted = _{ "'" ~ quoted_value ~ "'" }
 double_quoted = _{ "\"" ~ quoted_value ~ "\"" }
-triple_single = _{ "'''" ~ multiline_value ~ "'''" }
+triple_single = _{ "'''" ~ multiline_value_no_interpolation ~ "'''" }
 triple_double = _{ "\"\"\"" ~ multiline_value ~ "\"\"\"" }
 
 env_value = _{

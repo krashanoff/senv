@@ -62,10 +62,10 @@ fn main() -> Result<(), Box<dyn error::Error>> {
     for (key, val) in bindings.iter() {
         match args.shell_name {
             Shell::Sh | Shell::Ksh | Shell::Bash | Shell::Zsh => {
-                println!("export {}=\"\"\"{}\"\"\"", key, val.into_string(&bindings));
+                println!("export {}='''{}'''", key, val.into_string(&bindings));
             }
             Shell::Fish => {
-                println!("set -x {} \"{}\"", key, val.into_string(&bindings));
+                println!("set -x {} '{}'", key, val.into_string(&bindings));
             }
         }
     }
@@ -96,15 +96,16 @@ impl<'a: 'b, 'b> From<Pair<'a, Rule>> for Value<'b> {
         let mut contents = vec![];
         for character in p.into_inner() {
             match character.as_rule() {
-                Rule::quoted_character => contents.push(Either::Left(character.as_str())),
+                Rule::quoted_character | Rule::multiline_value_no_interpolation_character => {
+                    contents.push(Either::Left(character.as_str()))
+                }
                 Rule::unquoted_character => {
-                    println!("{:?}", &character);
                     let inner_str = character.as_str();
                     let mut inner_rules = character.into_inner();
                     match inner_rules.next() {
-                        Some(interpolation) => {
-                            contents.push(Either::Right(InterpolationKey(interpolation.into_inner().next().expect("msg").as_str())))
-                        }
+                        Some(interpolation) => contents.push(Either::Right(InterpolationKey(
+                            interpolation.into_inner().next().expect("msg").as_str(),
+                        ))),
                         None => {
                             contents.push(Either::Left(inner_str));
                         }
@@ -115,7 +116,7 @@ impl<'a: 'b, 'b> From<Pair<'a, Rule>> for Value<'b> {
                     contents.push(Either::Right(InterpolationKey(key.as_str())));
                 }
                 r => {
-                    panic!("bad interpolation: {:?}", r);
+                    panic!("bad rule: {:?}", r);
                 }
             }
         }
@@ -129,7 +130,11 @@ impl Value<'_> {
         self.into_string_inner(bindings, &mut seen_set)
     }
 
-    fn into_string_inner<'a: 'b, 'b>(&'a self, bindings: &HashMap<InterpolationKey, Value>, seen: &mut HashSet<&'b str>) -> String {
+    fn into_string_inner<'a: 'b, 'b>(
+        &'a self,
+        bindings: &'b HashMap<InterpolationKey, Value>,
+        seen: &mut HashSet<&'b str>,
+    ) -> String {
         let mut value = String::new();
         for char_or_key in &self.0 {
             match char_or_key {
@@ -142,7 +147,11 @@ impl Value<'_> {
                     }
                     match bindings.get(&key) {
                         Some(interpolated_value) => {
-                            value.push_str(interpolated_value.into_string(bindings).as_str());
+                            value.push_str(
+                                interpolated_value
+                                    .into_string_inner(bindings, seen)
+                                    .as_str(),
+                            );
                         }
                         None => {
                             panic!("couldn't get key of interpolated value: {:?}", key);
@@ -179,8 +188,8 @@ impl FromStr for Shell {
                 eprintln!(
                     r"The shell {} isn't supported by senv yet.
 
-It's really easy to add a conversion, though.
-Add one at <https://github.com/krashanoff/senv>!",
+It's easy to add a conversion, though.
+Add one at <https://github.com/krashanoff/senv>.",
                     s
                 );
                 exit(1);
