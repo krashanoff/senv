@@ -1,6 +1,13 @@
 [package]
 name = "senv"
 description = "Agnostic .env"
+documentation = "https://github.com/krashanoff/senv#readme"
+readme = "https://github.com/krashanoff/senv#readme"
+homepage = "https://github.com/krashanoff/senv"
+repository = "https://github.com/krashanoff/senv"
+license = "MIT"
+license-file = "LICENSE"
+categories = ["command-line-utilities"]
 authors = ["Leonid Krashanoff <leo@krashanoff.com>"]
 version = "0.1.0"
 edition = "2021"

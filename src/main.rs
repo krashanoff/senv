@@ -14,7 +14,7 @@ use either::Either;
 use pest::{iterators::Pair, Parser};
 
 #[derive(clap::Parser)]
-#[clap(about, version)]
+#[clap(about, author, version)]
 struct Args {
     /// Shell to output a conversion for.
     #[clap(value_enum, index = 1)]
@@ -165,7 +165,7 @@ impl Value<'_> {
 }
 
 /// Some shell supported by `senv`.
-#[derive(Debug, Clone, Copy)]
+#[derive(clap::ValueEnum, Debug, Clone, Copy)]
 enum Shell {
     Fish,
     Zsh,
