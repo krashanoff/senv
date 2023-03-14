@@ -1,6 +1,11 @@
 # senv
 
-A crappy (but correct) shell-agnostic intermediate representation of `.env` files.
+A crappy (but mostly correct) shell-agnostic intermediate representation of `.env` files.
+
+## Stuff That Needs Doing
+
+- [ ] Support escaped characters
+- [ ] Support things like '/'s and stuff
 
 ## Usage
 
